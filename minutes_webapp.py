@@ -84,7 +84,8 @@ def get_file_metadata(file):
         subprocess.run(["ffprobe", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
         ffmpeg_available = True
     except (subprocess.SubprocessError, FileNotFoundError):
-        st.warning("FFmpegが見つからないため、メタデータの詳細取得はスキップします。")
+        # 警告メッセージを非表示にするか、より情報的なメッセージに変更
+        st.info("詳細なメタデータ抽出は省略されます（FFmpeg非対応環境）")
     
     if ffmpeg_available:
         try:
@@ -202,7 +203,7 @@ def transcribe_audio(file, api_key, model="whisper-1", language="ja"):
     OpenAI Whisper APIを使用して音声を文字起こしする
     """
     try:
-        # OpenAIクライアントの初期化（proxiesパラメータを使わない）
+        # OpenAIクライアントの初期化
         client = OpenAI(api_key=api_key)
         
         # 一時ファイルを作成して保存
