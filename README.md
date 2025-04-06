@@ -1,114 +1,109 @@
 # MeetingSummarizer
 
-音声ファイルをアップロードすると、AIを使って文字起こしとサマリーを自動生成し、Notionデータベースに保存できるアプリケーションです。
+このアプリケーションは、音声ファイルをアップロードするとAIを使って自動的に文字起こしとサマリーを生成し、Notionデータベースに保存できるWebアプリケーションです。
 
-## 機能
+## 特徴
 
-- 音声ファイル（mp4, m4a, wav）の文字起こし（OpenAI Whisper API使用）
-- 文字起こしテキストの自動サマリー生成（GPT-4使用）
+- 音声ファイル（mp4, m4a, wav）を自動文字起こし
+- 会議内容の自動サマリー生成
 - 長い音声ファイルの自動分割処理
-- 音声ファイルのメタデータ（ファイル名、作成日時）の取得
 - Notionデータベースへの議事録保存
-- パスワード保護によるアクセス制限
+- パスワード保護機能付き
 
-## 必要条件
+## Streamlit Cloudでのデプロイ方法
 
-- Python 3.9以上
-- FFmpeg（音声処理とメタデータ抽出に必要）
-- OpenAI API Key
-- Notion API Key（オプション、Notion連携機能を使用する場合）
+1. **GitHubリポジトリの作成**:
+   - このプロジェクトをGitHubリポジトリにプッシュします
 
-## インストール方法
+2. **Streamlit Cloudでデプロイ**:
+   - [Streamlit Cloud](https://streamlit.io/cloud)にアクセスし、アカウントを作成/ログイン
+   - 「New app」ボタンをクリック
+   - リポジトリとブランチを選択
+   - メインファイルとして `minutes_webapp.py` を選択
+   - 「Deploy!」ボタンをクリック
 
-1. リポジトリをクローン：
+3. **シークレット設定**:
+   - デプロイ後、アプリの「⋮」メニュー → 「Settings」をクリック
+   - 「Secrets」セクションに以下のシークレットを追加（キーと値のペア）:
+   
+   ```
+   OPENAI_API_KEY = "sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+   NOTION_API_KEY = "secret_xxxxxxxxxxxxxxxxxxxxxxxx"
+   NOTION_DATABASE_ID = "xxxxxxxxxxxxxxxxxxxxxxxx"
+   APP_PASSWORD = "minutestest1234"  # 任意のパスワードに変更可能
+   ```
 
-```bash
-git clone https://github.com/yourusername/minutes.git
-cd minutes
-```
+## ローカル開発での実行方法
 
-2. 必要なライブラリをインストール：
+1. **必要なライブラリのインストール**:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-```bash
-pip install -r requirements.txt
-```
+2. **FFmpegのインストール**:
+   ```bash
+   # macOSの場合
+   brew install ffmpeg
+   
+   # Ubuntuの場合
+   apt-get install ffmpeg
+   
+   # Windowsの場合は公式サイトからダウンロード
+   ```
 
-3. FFmpegをインストール：
+3. **環境変数設定（オプション）**:
+   ```bash
+   export OPENAI_API_KEY="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+   export NOTION_API_KEY="secret_xxxxxxxxxxxxxxxxxxxxxxxx"
+   export NOTION_DATABASE_ID="xxxxxxxxxxxxxxxxxxxxxxxx"
+   export APP_PASSWORD="minutestest1234"
+   ```
 
-macOSの場合：
-```bash
-brew install ffmpeg
-```
+4. **アプリケーション実行**:
+   ```bash
+   streamlit run minutes_webapp.py
+   ```
 
-Windowsの場合：
-[FFmpegの公式サイト](https://ffmpeg.org/download.html)からダウンロードしてインストール
+## Notion連携のセットアップ
 
-4. `.env.example`を`.env`にコピーして編集：
+1. **Notionインテグレーション作成**:
+   - [Notion Integrations](https://www.notion.so/my-integrations) ページにアクセス
+   - 「+ New integration」ボタンをクリック
+   - 名前と関連するワークスペースを設定
+   - 「Submit」をクリックしてAPIキーを取得
 
-```bash
-cp .env.example .env
-# .envファイルを編集し、APIキーなどの情報を設定
-```
+2. **Notionデータベースの作成**:
+   - Notionで新しいデータベースを作成
+   - 以下のプロパティを設定（必要に応じて追加可能）:
+     - タイトル型プロパティ（例: 「名前」または「タイトル」）
+     - 日付型プロパティ（例: 「日付」）
 
-## 使い方
+3. **データベースとインテグレーションの接続**:
+   - データベースを開き、右上の「•••」ボタンをクリック
+   - 「アクセス権限を共有」を選択
+   - インテグレーションを検索し、選択
+   - 「招待」ボタンをクリック
 
-1. アプリケーションを起動：
+4. **データベースIDの取得**:
+   - データベースのURLからデータベースIDを取得
+   - 例: `https://www.notion.so/myworkspace/1cc5ba51319e8020a766e5f514988720?v=...`
+   - この例では `1cc5ba51319e8020a766e5f514988720` がデータベースID
 
-```bash
-streamlit run minutes.py
-```
+## FFmpegが利用できない環境での注意点
 
-2. ブラウザで表示されるアプリケーションにアクセス（デフォルトでは http://localhost:8501）
+Streamlit Cloudや一部のホスティングサービスではFFmpegが使用できない場合があります。その場合、以下の制限が発生します：
 
-3. パスワードを入力してログイン（デフォルトパスワード: minutestest1234）
+1. 大きな音声ファイル（25MB超）を処理できない
+2. ファイルのメタデータ（作成日時など）が取得できない
 
-4. 音声ファイルをアップロードし、会議タイトルを入力
+アップロードする音声ファイルは標準化し、なるべく25MB以下に担当者が事前に処理しておくことを推奨します。
 
-5. 文字起こしとサマリー生成が自動的に行われます
+## セキュリティに関する注意点
 
-6. 結果を確認し、必要に応じてNotionに保存またはMarkdownとしてダウンロード
-
-## Web公開方法
-
-### Streamlit Cloudを使う場合
-
-1. GitHubリポジトリにコードをプッシュ
-2. [Streamlit Cloud](https://streamlit.io/cloud)にアクセス
-3. リポジトリを連携して新しいアプリをデプロイ
-4. 環境変数に必要なAPIキーを設定
-
-### Herokuを使う場合
-
-1. Procfileを作成（以下の内容）:
-```
-web: streamlit run minutes.py
-```
-
-2. Herokuにデプロイ:
-```bash
-heroku create your-app-name
-git push heroku main
-```
-
-3. 環境変数を設定:
-```bash
-heroku config:set OPENAI_API_KEY=your_openai_api_key
-heroku config:set NOTION_API_KEY=your_notion_api_key
-heroku config:set NOTION_DATABASE_ID=your_notion_database_id
-heroku config:set APP_PASSWORD=your_app_password
-```
-
-## 注意事項
-
-- OpenAI APIとNotion APIの使用には料金がかかる場合があります
-- 大きな音声ファイルの処理には時間がかかります
-- 公開サーバーで使用する場合は、セキュリティに注意し、APIキーを安全に管理してください
+- OpenAIやNotionのAPIキーは機密情報です。必ずシークレットまたは環境変数で管理し、コード内にハードコードしないでください。
+- パスワード保護は基本的な保護機能であり、完全なセキュリティを保証するものではありません。本番環境ではより高度な認証方法を検討してください。
+- このアプリケーションは、API呼び出しごとに料金が発生するOpenAI APIを使用しています。利用制限や課金上限を設定することを検討してください。
 
 ## ライセンス
 
 MIT License
-
-## 貢献
-
-バグ報告や機能リクエストは、GitHubのIssueでお知らせください。
-プルリクエストも歓迎します。
