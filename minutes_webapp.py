@@ -26,8 +26,9 @@ def check_password():
     # 正しいパスワード (st.secrets から読み込み)
     correct_password = st.secrets.get("APP_PASSWORD", "")
     
-    # デバッグ情報を表示
-    st.write(f"\u73fe在の認証状態: {'\u8a8d証済み' if st.session_state['password_correct'] else '\u672a認証'}")  # デバッグ用
+    # デバッグ情報を表示 - f-string内でエスケープシーケンスを避けるため変数を先に定義
+    auth_status = "認証済み" if st.session_state["password_correct"] else "未認証"
+    st.write(f"現在の認証状態: {auth_status}")  # デバッグ用
     
     # パスワード入力フォーム
     st.markdown("### パスワード入力")
