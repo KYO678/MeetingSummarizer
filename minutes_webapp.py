@@ -4,7 +4,7 @@ import os
 import subprocess
 import json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from openai import OpenAI
 from notion_client import Client
 
@@ -61,22 +61,67 @@ def load_config():
     
     return config
 
+def extract_date_from_filename(filename):
+    """
+    ファイル名から日付情報を抽出しようとします（例: 会議_20250406.m4a）
+    """
+    import re
+    
+    # 8桁の数字を検索（YYYYMMDD形式）
+    date_match = re.search(r'(\d{8})', filename)
+    if date_match:
+        try:
+            date_str = date_match.group(1)
+            # YYYYMMDDからYYYY-MM-DDに変換
+            formatted_date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+            # 有効な日付かチェック
+            datetime.strptime(formatted_date, "%Y-%m-%d")
+            return formatted_date
+        except ValueError:
+            # 日付変換エラーの場合はNoneを返す
+            return None
+    return None
+
 def get_file_metadata(file):
     """
     ファイルのメタデータを取得します
     :param file: アップロードされたファイルオブジェクト
     :return: ファイル名と作成日時のタプル
     """
-    # 一時ファイルを作成して保存
-    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.name).suffix) as tmp_file:
-        tmp_file.write(file.getvalue())
-        tmp_path = tmp_file.name
-    
     # ファイル名を取得（拡張子も含む）
     filename = Path(file.name).name
     
-    # メタデータが取得できない場合、現在の日時を使用
-    creation_date = datetime.now().strftime('%Y-%m-%d')
+    # ファイル名から日付を抽出してみる
+    filename_date = extract_date_from_filename(filename)
+    
+    # デフォルトの日付（ファイル名から抽出できた場合はそれを使用、できなければ今日の日付）
+    default_date = datetime.strptime(filename_date, "%Y-%m-%d") if filename_date else datetime.now()
+    
+    # 会議の日付をユーザーに選択してもらう
+    # 1ヶ月前から今日までの範囲を選択可能に
+    min_date = datetime.now() - timedelta(days=30)
+    max_date = datetime.now()
+    
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        st.write("会議の日付:")
+    with col2:
+        meeting_date = st.date_input(
+            "会議の日付を選択",
+            value=default_date,
+            min_value=min_date,
+            max_value=max_date,
+            key="meeting_date",
+            label_visibility="collapsed"
+        )
+    
+    # 日付を文字列形式（YYYY-MM-DD）に変換
+    file_date = meeting_date.strftime('%Y-%m-%d')
+    
+    # 一時ファイルを作成して保存（メタデータ抽出用 - FFmpegがある場合）
+    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.name).suffix) as tmp_file:
+        tmp_file.write(file.getvalue())
+        tmp_path = tmp_file.name
     
     # FFmpegがあるかどうかチェック
     ffmpeg_available = False
@@ -84,9 +129,10 @@ def get_file_metadata(file):
         subprocess.run(["ffprobe", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
         ffmpeg_available = True
     except (subprocess.SubprocessError, FileNotFoundError):
-        # 警告メッセージを非表示にするか、より情報的なメッセージに変更
-        st.info("詳細なメタデータ抽出は省略されます（FFmpeg非対応環境）")
+        # FFmpegがなくても選択した日付を使用するので警告は不要
+        pass
     
+    # FFmpegが利用可能な場合は詳細メタデータも抽出を試みる（参考情報として）
     if ffmpeg_available:
         try:
             # FFmpegを使用して作成日時のメタデータを取得
@@ -100,39 +146,14 @@ def get_file_metadata(file):
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
             metadata = json.loads(result.stdout)
             
-            # 作成日時メタデータを抽出
+            # メタデータ情報を表示（オプション）
             if 'format' in metadata and 'tags' in metadata['format']:
                 tags = metadata['format']['tags']
-                # 様々なメタデータタグをチェック
-                for date_key in ['creation_time', 'date', 'creation_date', 'datetime']:
-                    if date_key in tags:
-                        creation_date = tags[date_key]
-                        break
-            
-            if creation_date:
-                # ISO 形式に変換、'T'で分割して日付部分だけを取得
-                try:
-                    # 様々な日付形式に対応
-                    if 'T' in creation_date:
-                        creation_date = creation_date.split('T')[0]  # ISO形式の場合
-                    elif ' ' in creation_date:
-                        creation_date = creation_date.split(' ')[0]  # 空白区切りの場合
-                    
-                    # YYYY:MM:DD形式をYYYY-MM-DDに変換
-                    if ':' in creation_date and creation_date.count(':') >= 2:
-                        parts = creation_date.split(':')
-                        if len(parts[0]) == 4:  # YYYY形式の年の場合
-                            creation_date = f"{parts[0]}-{parts[1]}-{parts[2]}"
-                except:
-                    # 日付形式の変換失敗の場合は無視
-                    pass
-            
-            # メタデータが取得できない場合、ファイルの更新日時を使用
-            if not creation_date:
-                file_stat = os.stat(tmp_path)
-                creation_date = datetime.fromtimestamp(file_stat.st_mtime).strftime('%Y-%m-%d')
+                if st.checkbox("ファイルのメタデータを表示", value=False):
+                    st.json(tags)
         except Exception as e:
-            st.warning(f"音声ファイルのメタデータ取得中にエラーが発生しました: {e}")
+            # メタデータ取得に失敗しても、ユーザーが選択した日付を使用するので問題なし
+            pass
     
     # 一時ファイルを削除
     try:
@@ -140,7 +161,7 @@ def get_file_metadata(file):
     except:
         pass
     
-    return filename, creation_date
+    return filename, file_date
 
 def split_text_for_notion(text, max_length=2000):
     """
@@ -528,7 +549,7 @@ def main():
         
         # ファイルのメタデータを取得
         filename, file_date = get_file_metadata(uploaded_file)
-        st.info(f"ファイル名: {filename}, 作成日時: {file_date}")
+        st.info(f"ファイル名: {filename}, 会議日付: {file_date}")
         
         with st.spinner("文字起こし中..."):
             try:
