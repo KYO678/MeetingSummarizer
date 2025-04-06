@@ -1,7 +1,6 @@
 import streamlit as st
 import tempfile
 import os
-import yaml
 import subprocess
 import json
 from pathlib import Path
@@ -15,7 +14,6 @@ MAX_SIZE = 25 * 1024 * 1024  # 25MB (Whisper APIの制限)
 def check_password():
     """
     パスワードによるアクセス制御機能
-    st.secretsから設定を読み込み
     """
     # セッションステートを初期化
     if "password_correct" not in st.session_state:
@@ -25,14 +23,11 @@ def check_password():
     if st.session_state["password_correct"]:
         return True
     
-    # 正しいパスワード (st.secretsから読み込み、なければデフォルト使用)
-    default_password = "minutestest1234"
+    # 正しいパスワード (st.secrets から読み込み)
+    correct_password = st.secrets.get("APP_PASSWORD", "")
     
-    # st.secretsから読み込み (ローカルでテスト時はデフォルト値を使用)
-    try:
-        correct_password = st.secrets.get("APP_PASSWORD", default_password)
-    except:
-        correct_password = default_password
+    # デバッグ情報を表示
+    st.write(f"\u73fe在の認証状態: {'\u8a8d証済み' if st.session_state['password_correct'] else '\u672a認証'}")  # デバッグ用
     
     # パスワード入力フォーム
     st.markdown("### パスワード入力")
@@ -51,38 +46,16 @@ def check_password():
 
 def load_config():
     """
-    st.secretsまたは環境変数から設定情報（APIキーなど）を読み込みます。
+    st.secrets から設定情報（APIキーなど）を読み込みます。
     """
-    # デフォルト設定
+    # 設定
     config = {
-        "openai": {"api_key": None},
-        "notion": {"api_key": None, "database_id": None}
+        "openai": {"api_key": st.secrets.get("OPENAI_API_KEY", "")},
+        "notion": {
+            "api_key": st.secrets.get("NOTION_API_KEY", ""),
+            "database_id": st.secrets.get("NOTION_DATABASE_ID", "")
+        }
     }
-    
-    # st.secretsから設定を読み込み
-    try:
-        # OpenAI API設定
-        if "OPENAI_API_KEY" in st.secrets:
-            config["openai"]["api_key"] = st.secrets["OPENAI_API_KEY"]
-        
-        # Notion API設定
-        if "NOTION_API_KEY" in st.secrets:
-            config["notion"]["api_key"] = st.secrets["NOTION_API_KEY"]
-        
-        if "NOTION_DATABASE_ID" in st.secrets:
-            config["notion"]["database_id"] = st.secrets["NOTION_DATABASE_ID"]
-    except:
-        st.info("st.secretsからの読み込みができませんでした。環境変数を使用します。")
-    
-    # 環境変数からも読み込み (st.secretsがない場合のフォールバック)
-    if not config["openai"]["api_key"] and os.environ.get("OPENAI_API_KEY"):
-        config["openai"]["api_key"] = os.environ.get("OPENAI_API_KEY")
-    
-    if not config["notion"]["api_key"] and os.environ.get("NOTION_API_KEY"):
-        config["notion"]["api_key"] = os.environ.get("NOTION_API_KEY")
-    
-    if not config["notion"]["database_id"] and os.environ.get("NOTION_DATABASE_ID"):
-        config["notion"]["database_id"] = os.environ.get("NOTION_DATABASE_ID")
     
     return config
 
@@ -371,7 +344,7 @@ def generate_summary(text, api_key):
     try:
         client = OpenAI(api_key=api_key)
         response = client.chat.completions.create(
-            model="gpt-4-turbo",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": "あなたは会議の議事録を要約する専門家です。構造的で簡潔、かつ重要なポイントが明確にわかるように情報をまとめます。"},
                 {"role": "user", "content": prompt}
@@ -515,18 +488,17 @@ def main():
         st.stop()  # 認証が通らなければここで処理を中断
     
     try:
-        # st.secretsから設定を読み込み
         config = load_config()
         api_key = config.get("openai", {}).get("api_key")
         notion_api_key = config.get("notion", {}).get("api_key")
         notion_database_id = config.get("notion", {}).get("database_id")
         
         if not api_key:
-            st.error("OpenAI APIキーが設定されていません。Streamlit Cloudの設定画面からシークレット「OPENAI_API_KEY」を設定してください。")
+            st.error("Streamlit Secretsから OpenAI APIキーが見つかりません。")
             return
         
         # Notion設定の確認
-        notion_configured = notion_api_key is not None and notion_database_id is not None
+        notion_configured = notion_api_key and notion_database_id
     except Exception as e:
         st.error(f"設定の読み込みエラー: {e}")
         return
@@ -588,7 +560,7 @@ def main():
                             )
                             st.success(result)
                 else:
-                    st.warning("Notionへの保存機能を使用するには、Streamlit Cloudの設定画面からシークレット「NOTION_API_KEY」と「NOTION_DATABASE_ID」を設定してください。")
+                    st.warning("Notionへの保存機能を使用するには、Streamlit Secretsに Notionの設定情報を入力してください。")
                     
             except Exception as e:
                 st.error(f"処理中にエラーが発生しました: {str(e)}")
