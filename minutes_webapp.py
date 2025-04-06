@@ -37,7 +37,8 @@ def check_password():
     if st.button("ログイン", key="login_button"):
         if password == correct_password:
             st.session_state["password_correct"] = True
-            st.experimental_rerun()  # セッションステートの更新を反映させるために再実行
+            # experimental_rerunをst.rerun()に変更
+            st.rerun()  # セッションステートの更新を反映させるために再実行
             return True
         else:
             st.error("パスワードが正しくありません")
@@ -74,9 +75,20 @@ def get_file_metadata(file):
     # ファイル名を取得（拡張子も含む）
     filename = Path(file.name).name
     
+    # メタデータが取得できない場合、現在の日時を使用
+    creation_date = datetime.now().strftime('%Y-%m-%d')
+    
+    # FFmpegがあるかどうかチェック
+    ffmpeg_available = False
     try:
-        # FFmpegを使用して作成日時のメタデータを取得することを試みる
+        subprocess.run(["ffprobe", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        ffmpeg_available = True
+    except (subprocess.SubprocessError, FileNotFoundError):
+        st.warning("FFmpegが見つからないため、メタデータの詳細取得はスキップします。")
+    
+    if ffmpeg_available:
         try:
+            # FFmpegを使用して作成日時のメタデータを取得
             cmd = [
                 "ffprobe",
                 "-v", "quiet",
@@ -88,7 +100,6 @@ def get_file_metadata(file):
             metadata = json.loads(result.stdout)
             
             # 作成日時メタデータを抽出
-            creation_date = None
             if 'format' in metadata and 'tags' in metadata['format']:
                 tags = metadata['format']['tags']
                 # 様々なメタデータタグをチェック
@@ -114,20 +125,19 @@ def get_file_metadata(file):
                 except:
                     # 日付形式の変換失敗の場合は無視
                     pass
+            
+            # メタデータが取得できない場合、ファイルの更新日時を使用
+            if not creation_date:
+                file_stat = os.stat(tmp_path)
+                creation_date = datetime.fromtimestamp(file_stat.st_mtime).strftime('%Y-%m-%d')
         except Exception as e:
             st.warning(f"音声ファイルのメタデータ取得中にエラーが発生しました: {e}")
-            creation_date = None
-        
-        # メタデータが取得できない場合、ファイルの更新日時を使用
-        if not creation_date:
-            file_stat = os.stat(tmp_path)
-            creation_date = datetime.fromtimestamp(file_stat.st_mtime).strftime('%Y-%m-%d')
-    finally:
-        # 一時ファイルを削除
-        try:
-            os.unlink(tmp_path)
-        except:
-            pass
+    
+    # 一時ファイルを削除
+    try:
+        os.unlink(tmp_path)
+    except:
+        pass
     
     return filename, creation_date
 
@@ -192,7 +202,7 @@ def transcribe_audio(file, api_key, model="whisper-1", language="ja"):
     OpenAI Whisper APIを使用して音声を文字起こしする
     """
     try:
-        # OpenAIクライアントの初期化
+        # OpenAIクライアントの初期化（proxiesパラメータを使わない）
         client = OpenAI(api_key=api_key)
         
         # 一時ファイルを作成して保存
@@ -207,11 +217,16 @@ def transcribe_audio(file, api_key, model="whisper-1", language="ja"):
             st.info(f"ファイルサイズが大きいため（{file_size/1024/1024:.2f}MB）、分割して処理します。")
             
             # FFmpegが利用可能か確認
+            ffmpeg_available = False
             try:
                 subprocess.run(["ffmpeg", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                st.error("音声分割にはFFmpegが必要です。FFmpegがインストールされていることを確認してください。")
-                raise Exception("FFmpegが見つかりません。FFmpegをインストールしてください。")
+                ffmpeg_available = True
+            except (subprocess.SubprocessError, FileNotFoundError):
+                st.error("音声分割にはFFmpegが必要です。Streamlit Cloudではファイルサイズが25MB以下の音声ファイルだけが対応可能です。")
+                raise Exception("FFmpegが見つかりません。より小さなファイルで試してください。")
+            
+            if not ffmpeg_available:
+                raise Exception("FFmpegが見つかりません。より小さなファイルで試してください。")
             
             # 音声ファイルを複数のチャンクに分割
             temp_dir = tempfile.mkdtemp()
